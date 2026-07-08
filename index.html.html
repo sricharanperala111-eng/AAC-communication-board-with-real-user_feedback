@@ -1,0 +1,862 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+<title>Talk Board — On-device AI AAC (wearable concept)</title>
+<style>
+  :root{
+    --yellow:#fff4b8; --yellow-b:#e0c23f;
+    --green:#c9f2c9;  --green-b:#5cb85c;
+    --blue:#c7e6ff;   --blue-b:#3d8bd6;
+    --orange:#ffdcb0; --orange-b:#e0842f;
+    --pink:#f6cdec;   --pink-b:#d15fb0;
+    --purple:#ded0f9; --purple-b:#8b5fd1;
+    --gray-bg:#f3f4f6; --ink:#222;
+  }
+  *{box-sizing:border-box;}
+  html,body{height:100%;margin:0;}
+  body{
+    font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
+    background:var(--gray-bg);
+    color:var(--ink);
+    display:flex;
+    flex-direction:column;
+    height:100vh;
+    overflow:hidden;
+  }
+
+  /* ---------- Top bar ---------- */
+  #top-bar{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:10px;
+    padding:10px 14px;
+    background:#20232a;
+    color:#fff;
+    flex-shrink:0;
+    flex-wrap:wrap;
+  }
+  #app-title{ font-weight:700; font-size:16px; }
+  #app-title small{ font-weight:400; opacity:.75; margin-left:6px; font-size:11px; }
+  #top-actions{ display:flex; gap:8px; flex-wrap:wrap; }
+  .mini-btn{ background:#3a3f4b; color:#fff; border:none; border-radius:8px; padding:8px 12px; font-size:13px; cursor:pointer; }
+  .mini-btn:hover{ background:#4b515f; }
+
+  /* ---------- App shell (becomes the "watch" in watch-mode) ---------- */
+  #app-shell{
+    flex:1;
+    display:flex;
+    flex-direction:column;
+    overflow:hidden;
+    position:relative;
+    transition:width .25s ease, height .25s ease, border-radius .25s ease;
+  }
+  #app-shell.watch-mode{
+    width:340px;
+    height:420px;
+    margin:20px auto;
+    flex:none;
+    background:#000;
+    border:12px solid #111;
+    border-radius:42px;
+    box-shadow:0 14px 34px rgba(0,0,0,.45);
+  }
+  #watch-clock{ display:none; text-align:center; font-size:12px; padding:4px 0 0; color:#888; letter-spacing:1px; }
+  #app-shell.watch-mode #watch-clock{ display:block; }
+
+  /* ---------- Sentence strip ---------- */
+  #sentence-bar{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    padding:10px 12px;
+    background:#fff;
+    border-bottom:3px solid #ddd;
+    flex-shrink:0;
+  }
+  #sentence-strip{
+    flex:1;
+    min-height:56px;
+    display:flex;
+    align-items:center;
+    gap:8px;
+    overflow-x:auto;
+    background:#fafafa;
+    border:2px solid #ddd;
+    border-radius:10px;
+    padding:6px 10px;
+  }
+  #sentence-strip .chip{
+    display:flex;
+    align-items:center;
+    gap:6px;
+    background:#eef;
+    border-radius:8px;
+    padding:6px 10px;
+    font-size:18px;
+    white-space:nowrap;
+    flex-shrink:0;
+  }
+  #sentence-strip .chip .sym{font-size:22px;}
+  #sentence-strip:empty::before{
+    content:"Tap symbols below — words will appear here";
+    color:#999;
+    font-size:16px;
+  }
+  .bar-btn{
+    border:none;
+    border-radius:10px;
+    font-size:16px;
+    font-weight:600;
+    padding:12px 16px;
+    cursor:pointer;
+    flex-shrink:0;
+    min-height:56px;
+  }
+  #speak-btn{ background:#2e7d32; color:#fff; }
+  #speak-btn:active{ background:#1b5e20; }
+  #back-btn{ background:#ffb300; color:#222; }
+  #clear-btn{ background:#e53935; color:#fff; }
+  #expand-btn{ background:#7c3aed; color:#fff; }
+
+  /* ---------- AI suggestion chips ---------- */
+  #suggestions{
+    display:none;
+    gap:8px;
+    padding:8px 12px;
+    background:#fff;
+    border-bottom:1px solid #eee;
+    flex-wrap:wrap;
+    flex-shrink:0;
+  }
+  .suggest-chip{
+    background:#fef3c7;
+    border:1px solid #f5c451;
+    border-radius:16px;
+    padding:8px 14px;
+    font-size:14px;
+    cursor:pointer;
+  }
+  .suggest-chip:active{ background:#fde68a; }
+
+  /* ---------- AI expanded sentence banner ---------- */
+  #expanded-box{
+    display:none;
+    align-items:center;
+    gap:10px;
+    padding:10px 12px;
+    background:#eafbe7;
+    border-bottom:2px solid #8fd19e;
+    flex-shrink:0;
+    flex-wrap:wrap;
+  }
+  #expanded-box span{ flex:1; font-size:16px; font-weight:600; }
+  #expanded-box button{ border:none; border-radius:8px; padding:8px 12px; font-size:13px; cursor:pointer; }
+  #expanded-speak-btn{ background:#2e7d32; color:#fff; }
+  #expanded-dismiss-btn{ background:#ddd; }
+
+  /* ---------- Settings row ---------- */
+  #settings{
+    display:flex;
+    align-items:center;
+    gap:12px;
+    padding:8px 12px;
+    background:#fff;
+    border-bottom:1px solid #e5e5e5;
+    font-size:13px;
+    flex-shrink:0;
+    flex-wrap:wrap;
+  }
+  #settings label{display:flex;align-items:center;gap:6px;}
+  #settings select, #settings input[type=range]{ vertical-align:middle; }
+  #ai-status{ font-size:12px; color:#666; font-weight:600; }
+  #key-note{ width:100%; font-size:11px; color:#999; }
+
+  /* ---------- Category tabs ---------- */
+  #tabs{
+    display:flex;
+    gap:6px;
+    padding:8px 10px;
+    overflow-x:auto;
+    background:#fff;
+    border-bottom:1px solid #e5e5e5;
+    flex-shrink:0;
+  }
+  .tab-btn{
+    border:2px solid transparent;
+    border-radius:20px;
+    padding:10px 16px;
+    font-size:15px;
+    font-weight:600;
+    cursor:pointer;
+    white-space:nowrap;
+    background:#eee;
+    flex-shrink:0;
+  }
+  .tab-btn.active{ border-color:#333; }
+
+  /* ---------- Symbol grid ---------- */
+  #grid-wrap{ flex:1; overflow-y:auto; padding:12px; background:var(--gray-bg); }
+  #grid{
+    display:grid;
+    grid-template-columns:repeat(auto-fill,minmax(120px,1fr));
+    gap:12px;
+  }
+  .sym-btn{
+    border:none;
+    border-radius:14px;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    gap:6px;
+    padding:14px 6px;
+    min-height:110px;
+    cursor:pointer;
+    box-shadow:0 2px 4px rgba(0,0,0,0.12);
+    -webkit-tap-highlight-color:transparent;
+    touch-action:manipulation;
+  }
+  .sym-btn:active{ transform:scale(0.94); }
+  .sym-btn .emoji{ font-size:40px; line-height:1; }
+  .sym-btn .label{ font-size:15px; font-weight:700; color:#222; text-align:center; }
+  .add-tile{ background:#fff; border:2px dashed #999; color:#555; }
+
+  /* category colors */
+  .cat-people   { background:var(--yellow); border:2px solid var(--yellow-b); }
+  .cat-actions  { background:var(--green);  border:2px solid var(--green-b); }
+  .cat-describe { background:var(--blue);   border:2px solid var(--blue-b); }
+  .cat-things   { background:var(--orange); border:2px solid var(--orange-b); }
+  .cat-social   { background:var(--pink);   border:2px solid var(--pink-b); }
+  .cat-questions{ background:var(--purple); border:2px solid var(--purple-b); }
+
+  #legend{
+    display:flex; gap:10px; flex-wrap:wrap; padding:0 12px 10px; font-size:12px; color:#555; background:#fff;
+  }
+  #legend span{ display:flex; align-items:center; gap:4px; }
+  #legend i{ width:12px; height:12px; border-radius:3px; display:inline-block; }
+
+  /* ---------- Watch-mode: shrink everything ---------- */
+  #app-shell.watch-mode #settings,
+  #app-shell.watch-mode #legend{ display:none; }
+  #app-shell.watch-mode #sentence-bar{ padding:6px 8px; gap:6px; }
+  #app-shell.watch-mode #sentence-strip{ min-height:40px; font-size:13px; padding:4px 8px; }
+  #app-shell.watch-mode #sentence-strip .chip{ font-size:13px; padding:4px 6px; }
+  #app-shell.watch-mode .bar-btn{ padding:8px 10px; font-size:12px; min-height:40px; }
+  #app-shell.watch-mode #tabs{ padding:4px 6px; }
+  #app-shell.watch-mode .tab-btn{ padding:6px 10px; font-size:11px; }
+  #app-shell.watch-mode #grid-wrap{ padding:6px; }
+  #app-shell.watch-mode #grid{ grid-template-columns:repeat(2, 1fr); gap:8px; }
+  #app-shell.watch-mode .sym-btn{ min-height:78px; padding:8px 4px; }
+  #app-shell.watch-mode .sym-btn .emoji{ font-size:26px; }
+  #app-shell.watch-mode .sym-btn .label{ font-size:10px; }
+  #app-shell.watch-mode #suggestions{ padding:4px 8px; }
+  #app-shell.watch-mode .suggest-chip{ font-size:11px; padding:5px 8px; }
+
+  /* ---------- Modal ---------- */
+  #modal-overlay{ position:fixed; inset:0; background:rgba(0,0,0,.5); display:none; align-items:center; justify-content:center; z-index:1000; padding:20px; }
+  #modal-box{ background:#fff; border-radius:16px; padding:20px; max-width:420px; width:100%; box-shadow:0 10px 40px rgba(0,0,0,.3); max-height:80vh; overflow-y:auto; }
+  #modal-box h3{ margin-top:0; }
+  #modal-box input, #modal-box textarea{ width:100%; padding:10px; border:1px solid #ccc; border-radius:8px; font-size:15px; margin:8px 0; font-family:inherit; }
+  .modal-actions{ display:flex; gap:8px; flex-wrap:wrap; margin-top:10px; }
+  .modal-btn{ padding:10px 14px; border:none; border-radius:8px; font-size:14px; cursor:pointer; background:#eee; }
+  .modal-btn.primary{ background:#2e7d32; color:#fff; }
+  #new-word-status, #caregiver-status{ font-size:13px; color:#666; margin-top:6px; min-height:16px; }
+</style>
+</head>
+<body>
+
+<div id="top-bar">
+  <span id="app-title">🗣 Talk Board <small>on-device AI AAC — wearable concept</small></span>
+  <div id="top-actions">
+    <button id="caregiver-btn" class="mini-btn">🧑‍⚕️ Caregiver Setup</button>
+    <button id="watch-toggle-btn" class="mini-btn">⌚ Preview as Wearable</button>
+  </div>
+</div>
+
+<div id="app-shell">
+  <div id="watch-clock"></div>
+
+  <div id="sentence-bar">
+    <div id="sentence-strip" role="log" aria-live="polite"></div>
+    <button class="bar-btn" id="back-btn" title="Remove last word">⌫</button>
+    <button class="bar-btn" id="clear-btn" title="Clear sentence">Clear</button>
+    <button class="bar-btn" id="expand-btn" title="Turn taps into a natural sentence (AI)">✨ Expand</button>
+    <button class="bar-btn" id="speak-btn" title="Speak full sentence">🔊 Speak</button>
+  </div>
+
+  <div id="expanded-box">
+    <span id="expanded-preview"></span>
+    <button id="expanded-speak-btn">🔊 Speak this</button>
+    <button id="expanded-dismiss-btn">✕</button>
+  </div>
+
+  <div id="suggestions"></div>
+
+  <div id="settings">
+    <span id="ai-status">🤖 loading AI model…</span>
+    <label>Voice:
+      <select id="voice-select"></select>
+    </label>
+    <label>Rate:
+      <input type="range" id="rate" min="0.5" max="1.5" step="0.1" value="0.9">
+    </label>
+    <label><input type="checkbox" id="speak-on-tap" checked> Speak each tap</label>
+    <span id="key-note">AI runs fully on-device in your browser — no account, no API key. First use downloads a small model (~60MB) which is then cached for offline use.</span>
+  </div>
+
+  <div id="tabs"></div>
+  <div id="legend">
+    <span><i style="background:var(--yellow-b)"></i>People</span>
+    <span><i style="background:var(--green-b)"></i>Actions</span>
+    <span><i style="background:var(--blue-b)"></i>Describing</span>
+    <span><i style="background:var(--orange-b)"></i>Things</span>
+    <span><i style="background:var(--pink-b)"></i>Social</span>
+    <span><i style="background:var(--purple-b)"></i>Questions</span>
+  </div>
+  <div id="grid-wrap"><div id="grid"></div></div>
+</div>
+
+<div id="modal-overlay">
+  <div id="modal-box"></div>
+</div>
+
+<script type="module">
+import { pipeline, env } from "https://cdn.jsdelivr.net/npm/@xenova/transformers@2/dist/transformers.min.js";
+env.allowLocalModels = false;
+
+// =========================================================
+// Data: categories + symbols
+// cat key controls color coding (Fitzgerald-key-inspired AAC scheme)
+// =========================================================
+const CATEGORIES = [
+  { id:"core",     label:"⭐ Core"     },
+  { id:"feelings", label:"😊 Feelings" },
+  { id:"needs",    label:"🚻 Needs"    },
+  { id:"food",     label:"🍽 Food"     },
+  { id:"people",   label:"👪 People"   },
+  { id:"actions",  label:"🏃 Actions"  },
+  { id:"places",   label:"🏠 Places"   },
+];
+
+const SYMBOLS = {
+  core: [
+    {t:"Yes", e:"👍", cat:"social"},
+    {t:"No", e:"👎", cat:"social"},
+    {t:"Please", e:"🙏", cat:"social"},
+    {t:"Thank you", e:"🤝", cat:"social"},
+    {t:"Help", e:"🆘", cat:"actions"},
+    {t:"Stop", e:"✋", cat:"actions"},
+    {t:"More", e:"➕", cat:"describe"},
+    {t:"All done", e:"✅", cat:"social"},
+    {t:"I want", e:"🙋", cat:"people"},
+    {t:"I need", e:"❗", cat:"people"},
+    {t:"I like", e:"❤️", cat:"people"},
+    {t:"I don't like", e:"💔", cat:"people"},
+    {t:"Wait", e:"⏳", cat:"actions"},
+    {t:"Not now", e:"🚫", cat:"social"},
+    {t:"Where?", e:"❓", cat:"questions"},
+    {t:"What?", e:"❔", cat:"questions"},
+  ],
+  feelings: [
+    {t:"Happy", e:"😀", cat:"describe"},
+    {t:"Sad", e:"😢", cat:"describe"},
+    {t:"Angry", e:"😠", cat:"describe"},
+    {t:"Tired", e:"😴", cat:"describe"},
+    {t:"In pain", e:"🤕", cat:"describe"},
+    {t:"Scared", e:"😨", cat:"describe"},
+    {t:"Sick", e:"🤒", cat:"describe"},
+    {t:"Excited", e:"🤩", cat:"describe"},
+    {t:"Confused", e:"😕", cat:"describe"},
+    {t:"Bored", e:"🥱", cat:"describe"},
+    {t:"Calm", e:"😌", cat:"describe"},
+    {t:"Cold", e:"🥶", cat:"describe"},
+    {t:"Hot", e:"🥵", cat:"describe"},
+  ],
+  needs: [
+    {t:"Bathroom", e:"🚻", cat:"things"},
+    {t:"Water", e:"💧", cat:"things"},
+    {t:"Hungry", e:"🍴", cat:"describe"},
+    {t:"Thirsty", e:"🥤", cat:"describe"},
+    {t:"Medicine", e:"💊", cat:"things"},
+    {t:"Rest", e:"🛌", cat:"actions"},
+    {t:"Blanket", e:"🧣", cat:"things"},
+    {t:"Glasses", e:"👓", cat:"things"},
+    {t:"Phone", e:"📱", cat:"things"},
+    {t:"Too loud", e:"🔊", cat:"describe"},
+    {t:"Too bright", e:"💡", cat:"describe"},
+  ],
+  food: [
+    {t:"Eat", e:"🍽", cat:"actions"},
+    {t:"Drink", e:"🥤", cat:"actions"},
+    {t:"Water", e:"💧", cat:"things"},
+    {t:"Snack", e:"🍪", cat:"things"},
+    {t:"Fruit", e:"🍎", cat:"things"},
+    {t:"Bread", e:"🍞", cat:"things"},
+    {t:"Soup", e:"🍲", cat:"things"},
+    {t:"Coffee", e:"☕", cat:"things"},
+    {t:"Tea", e:"🍵", cat:"things"},
+    {t:"More food", e:"➕", cat:"describe"},
+    {t:"Finished eating", e:"✅", cat:"social"},
+  ],
+  people: [
+    {t:"Me", e:"🙋", cat:"people"},
+    {t:"You", e:"👉", cat:"people"},
+    {t:"Mom", e:"👩", cat:"people"},
+    {t:"Dad", e:"👨", cat:"people"},
+    {t:"Family", e:"👪", cat:"people"},
+    {t:"Friend", e:"🧑‍🤝‍🧑", cat:"people"},
+    {t:"Doctor", e:"🩺", cat:"people"},
+    {t:"Nurse", e:"👩‍⚕️", cat:"people"},
+    {t:"Caregiver", e:"🧑‍⚕️", cat:"people"},
+  ],
+  actions: [
+    {t:"Go", e:"🚶", cat:"actions"},
+    {t:"Come here", e:"👋", cat:"actions"},
+    {t:"Sit", e:"🪑", cat:"actions"},
+    {t:"Stand", e:"🧍", cat:"actions"},
+    {t:"Sleep", e:"😴", cat:"actions"},
+    {t:"Play", e:"🎲", cat:"actions"},
+    {t:"Read", e:"📖", cat:"actions"},
+    {t:"Watch TV", e:"📺", cat:"actions"},
+    {t:"Listen to music", e:"🎵", cat:"actions"},
+    {t:"Call someone", e:"📞", cat:"actions"},
+    {t:"Open", e:"🔓", cat:"actions"},
+    {t:"Close", e:"🔒", cat:"actions"},
+    {t:"Turn on", e:"🔛", cat:"actions"},
+    {t:"Turn off", e:"⭕", cat:"actions"},
+  ],
+  places: [
+    {t:"Home", e:"🏠", cat:"things"},
+    {t:"Outside", e:"🌳", cat:"things"},
+    {t:"Bedroom", e:"🛏", cat:"things"},
+    {t:"Bathroom", e:"🚻", cat:"things"},
+    {t:"Kitchen", e:"🍳", cat:"things"},
+    {t:"Car", e:"🚗", cat:"things"},
+    {t:"Hospital", e:"🏥", cat:"things"},
+    {t:"School / Work", e:"🏫", cat:"things"},
+  ],
+};
+
+// =========================================================
+// Persisted state: custom words + caregiver-built board
+// =========================================================
+function loadCustomWords(){
+  try{ return JSON.parse(localStorage.getItem('aac_custom_words') || '[]'); }catch(e){ return []; }
+}
+function saveCustomWords(list){
+  localStorage.setItem('aac_custom_words', JSON.stringify(list));
+}
+SYMBOLS.custom = loadCustomWords();
+
+function loadPersonalized(){
+  try{ return JSON.parse(localStorage.getItem('aac_personalized') || 'null'); }catch(e){ return null; }
+}
+let personalizedBoard = loadPersonalized();
+
+CATEGORIES.push({ id:"custom", label:"⭐ My Words" });
+if (personalizedBoard && Array.isArray(personalizedBoard.words)) {
+  SYMBOLS.personalized = personalizedBoard.words;
+  CATEGORIES.splice(CATEGORIES.length - 1, 0, { id:"personalized", label:"🧩 " + (personalizedBoard.boardName || "My Board") });
+}
+
+function upsertPersonalizedTab(obj){
+  SYMBOLS.personalized = obj.words;
+  const idx = CATEGORIES.findIndex(c => c.id === "personalized");
+  const tabDef = { id:"personalized", label:"🧩 " + (obj.boardName || "My Board") };
+  if (idx >= 0) {
+    CATEGORIES[idx] = tabDef;
+  } else {
+    const customIdx = CATEGORIES.findIndex(c => c.id === "custom");
+    CATEGORIES.splice(customIdx, 0, tabDef);
+  }
+}
+
+// Flatten all curated words into a lookup table so new-word generation
+// can reuse a *known-good* emoji/category instead of trusting a tiny
+// model to invent one.
+const KNOWN_WORDS = {};
+function indexKnownWords(){
+  Object.keys(SYMBOLS).forEach(catKey=>{
+    (SYMBOLS[catKey] || []).forEach(sym=>{
+      const key = sym.t.toLowerCase();
+      if (!KNOWN_WORDS[key]) KNOWN_WORDS[key] = { e: sym.e, cat: sym.cat };
+    });
+  });
+}
+indexKnownWords();
+
+// =========================================================
+// UI state
+// =========================================================
+let currentCat = "core";
+let sentence = []; // array of {t, e}
+
+const tabsEl = document.getElementById("tabs");
+const gridEl = document.getElementById("grid");
+const stripEl = document.getElementById("sentence-strip");
+const speakOnTap = document.getElementById("speak-on-tap");
+const rateInput = document.getElementById("rate");
+const voiceSelect = document.getElementById("voice-select");
+
+// ---------- Tabs ----------
+function buildTabs(){
+  tabsEl.innerHTML = "";
+  CATEGORIES.forEach(c=>{
+    const b = document.createElement("button");
+    b.className = "tab-btn" + (c.id === currentCat ? " active" : "");
+    b.textContent = c.label;
+    b.dataset.cat = c.id;
+    b.onclick = ()=>{ currentCat = c.id; buildTabs(); renderGrid(); };
+    tabsEl.appendChild(b);
+  });
+}
+
+// ---------- Grid ----------
+function renderGrid(){
+  gridEl.innerHTML = "";
+  const list = SYMBOLS[currentCat] || [];
+  list.forEach(sym=>{
+    const btn = document.createElement("button");
+    btn.className = "sym-btn cat-" + sym.cat;
+    btn.innerHTML = `<span class="emoji">${sym.e}</span><span class="label">${sym.t}</span>`;
+    btn.onclick = ()=> selectSymbol(sym);
+    gridEl.appendChild(btn);
+  });
+  if (currentCat === "custom") {
+    const addBtn = document.createElement("button");
+    addBtn.className = "sym-btn add-tile";
+    addBtn.innerHTML = `<span class="emoji">➕</span><span class="label">Add word</span>`;
+    addBtn.onclick = openAddWordModal;
+    gridEl.appendChild(addBtn);
+  }
+}
+
+// ---------- Sentence handling ----------
+function selectSymbol(sym){
+  sentence.push(sym);
+  renderStrip();
+  if (speakOnTap.checked) speak(sym.t);
+  scheduleSuggestions();
+}
+
+function renderStrip(){
+  stripEl.innerHTML = "";
+  sentence.forEach(sym=>{
+    const chip = document.createElement("div");
+    chip.className = "chip";
+    chip.innerHTML = `<span class="sym">${sym.e}</span><span>${sym.t}</span>`;
+    stripEl.appendChild(chip);
+  });
+  stripEl.scrollLeft = stripEl.scrollWidth;
+}
+
+document.getElementById("back-btn").onclick = ()=>{
+  sentence.pop();
+  renderStrip();
+  hideExpanded();
+  scheduleSuggestions();
+};
+document.getElementById("clear-btn").onclick = ()=>{
+  sentence = [];
+  renderStrip();
+  hideExpanded();
+  renderSuggestions([]);
+};
+document.getElementById("speak-btn").onclick = ()=>{
+  if (sentence.length === 0) return;
+  speak(sentence.map(s=>s.t).join(". "));
+};
+
+function hideExpanded(){
+  document.getElementById("expanded-box").style.display = "none";
+}
+
+// =========================================================
+// Speech synthesis (text-to-speech) — built into the browser
+// =========================================================
+let voices = [];
+function loadVoices(){
+  voices = speechSynthesis.getVoices();
+  voiceSelect.innerHTML = "";
+  voices.forEach((v,i)=>{
+    const opt = document.createElement("option");
+    opt.value = i;
+    opt.textContent = `${v.name} (${v.lang})`;
+    voiceSelect.appendChild(opt);
+  });
+}
+speechSynthesis.onvoiceschanged = loadVoices;
+loadVoices();
+
+function speak(text){
+  if (!('speechSynthesis' in window)) {
+    alert("Text-to-speech isn't supported in this browser.");
+    return;
+  }
+  speechSynthesis.cancel();
+  const utter = new SpeechSynthesisUtterance(text);
+  const idx = voiceSelect.value;
+  if (voices[idx]) utter.voice = voices[idx];
+  utter.rate = parseFloat(rateInput.value);
+  speechSynthesis.speak(utter);
+}
+
+// =========================================================
+// On-device AI (transformers.js running a small model in the browser)
+// No account, no API key, no server — everything happens locally.
+// =========================================================
+let generator = null;
+let modelState = "loading"; // loading | ready | error
+
+function setAiStatus(busy){
+  const el = document.getElementById("ai-status");
+  if (!el) return;
+  if (busy) { el.textContent = "🤖 thinking…"; return; }
+  if (modelState === "loading") el.textContent = "🤖 loading AI model… (first time only)";
+  else if (modelState === "ready") el.textContent = "🤖 AI ready (on-device)";
+  else el.textContent = "🤖 AI unavailable — check your internet connection";
+}
+
+async function initModel(){
+  setAiStatus(false);
+  try {
+    generator = await pipeline("text2text-generation", "Xenova/LaMini-Flan-T5-77M", { quantized: true });
+    modelState = "ready";
+  } catch (e) {
+    console.error("AI model failed to load", e);
+    modelState = "error";
+  }
+  setAiStatus(false);
+}
+initModel();
+
+async function askAI(prompt, maxNewTokens){
+  if (modelState !== "ready" || !generator) return null;
+  setAiStatus(true);
+  try {
+    const result = await generator(prompt, { max_new_tokens: maxNewTokens || 40 });
+    return ((result && result[0] && result[0].generated_text) || "").trim();
+  } catch (e) {
+    console.error("AI generation failed", e);
+    return null;
+  } finally {
+    setAiStatus(false);
+  }
+}
+
+function parseWordList(text, limit){
+  if (!text) return [];
+  return text
+    .split(/[,\n;]+/)
+    .map(s => s.replace(/^[\d.\-\)\s]+/, "").trim())
+    .filter(s => s.length > 0 && s.length < 24)
+    .slice(0, limit);
+}
+
+// ---- 1) Next-word / next-phrase prediction ----
+let suggestTimer = null;
+function scheduleSuggestions(){
+  clearTimeout(suggestTimer);
+  if (modelState !== "ready") { renderSuggestions([]); return; }
+  suggestTimer = setTimeout(fetchSuggestions, 400);
+}
+
+async function fetchSuggestions(){
+  const words = sentence.map(s => s.t);
+  const prompt = words.length
+    ? `Continue this list of communication-board words with 3 more likely next words, separated by commas. Words so far: ${words.join(", ")}.`
+    : `List 3 good short words to start a sentence on a communication board, separated by commas.`;
+  const text = await askAI(prompt, 30);
+  renderSuggestions(parseWordList(text, 3));
+}
+
+function renderSuggestions(list){
+  const box = document.getElementById("suggestions");
+  box.innerHTML = "";
+  if (!list || !list.length) { box.style.display = "none"; return; }
+  box.style.display = "flex";
+  list.forEach(word=>{
+    const chip = document.createElement("button");
+    chip.className = "suggest-chip";
+    chip.textContent = "✨ " + word;
+    chip.onclick = ()=> selectSymbol({ t: word, e: "✨", cat: "describe" });
+    box.appendChild(chip);
+  });
+}
+
+// ---- 2) Expand tapped words into a full natural sentence ----
+document.getElementById("expand-btn").onclick = async ()=>{
+  if (sentence.length === 0) return;
+  if (modelState !== "ready") {
+    alert("The on-device AI model isn't ready yet — please wait a few seconds and try again.");
+    return;
+  }
+  const words = sentence.map(s => s.t).join(", ");
+  const prompt = `Turn these words into one short, natural spoken sentence: ${words}.`;
+  const text = await askAI(prompt, 40);
+  if (text) {
+    document.getElementById("expanded-preview").textContent = text;
+    document.getElementById("expanded-box").style.display = "flex";
+  }
+};
+document.getElementById("expanded-speak-btn").onclick = ()=>{
+  speak(document.getElementById("expanded-preview").textContent);
+};
+document.getElementById("expanded-dismiss-btn").onclick = hideExpanded;
+
+// ---- 3) Generate a custom symbol on demand ----
+const FALLBACK_EMOJI = { people:"🧑", actions:"🏃", describe:"💭", things:"📦", social:"🗨️", questions:"❓" };
+const VALID_CATS = ["people","actions","describe","things","social","questions"];
+
+async function classifyCategory(word){
+  if (modelState !== "ready") return "things";
+  const prompt = `Which single category best fits the word "${word}" on a communication board: people, actions, describe, things, social, or questions? Answer with just one of those words.`;
+  const text = await askAI(prompt, 6);
+  const found = VALID_CATS.find(c => (text || "").toLowerCase().includes(c));
+  return found || "things";
+}
+
+async function generateSymbolFor(word){
+  const key = word.toLowerCase().trim();
+  if (KNOWN_WORDS[key]) return { t: word, e: KNOWN_WORDS[key].e, cat: KNOWN_WORDS[key].cat };
+  const partialKey = Object.keys(KNOWN_WORDS).find(k => key.includes(k) || k.includes(key));
+  if (partialKey) return { t: word, e: KNOWN_WORDS[partialKey].e, cat: KNOWN_WORDS[partialKey].cat };
+  const cat = await classifyCategory(word);
+  return { t: word, e: FALLBACK_EMOJI[cat], cat };
+}
+
+function openAddWordModal(){
+  openModal(`
+    <h3>Add a new word</h3>
+    <input id="new-word-input" placeholder="Type a word or short phrase" />
+    <div class="modal-actions">
+      <button id="generate-word-btn" class="modal-btn primary">✨ Generate symbol</button>
+      <button id="cancel-word-btn" class="modal-btn">Cancel</button>
+    </div>
+    <div id="new-word-status"></div>
+  `);
+  document.getElementById("cancel-word-btn").onclick = closeModal;
+  document.getElementById("generate-word-btn").onclick = async ()=>{
+    const val = document.getElementById("new-word-input").value.trim();
+    if (!val) return;
+    document.getElementById("new-word-status").textContent = "Thinking…";
+    const sym = await generateSymbolFor(val);
+    SYMBOLS.custom.push(sym);
+    saveCustomWords(SYMBOLS.custom);
+    renderGrid();
+    closeModal();
+  };
+}
+
+// ---- 4) Caregiver voice/text -> personalized starter board ----
+const SpeechRecog = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+function startDictation(targetId){
+  if (!SpeechRecog) return;
+  const rec = new SpeechRecog();
+  rec.lang = "en-US";
+  rec.interimResults = false;
+  rec.maxAlternatives = 1;
+  const btn = document.getElementById("mic-btn");
+  if (btn) btn.textContent = "🎤 Listening…";
+  rec.onresult = (e)=>{
+    const transcript = e.results[0][0].transcript;
+    const field = document.getElementById(targetId);
+    field.value = (field.value ? field.value + " " : "") + transcript;
+  };
+  rec.onend = ()=>{ if (btn) btn.textContent = "🎤 Dictate"; };
+  rec.onerror = ()=>{ if (btn) btn.textContent = "🎤 Dictate"; };
+  rec.start();
+}
+
+document.getElementById("caregiver-btn").onclick = ()=>{
+  openModal(`
+    <h3>Caregiver: build a personalized board</h3>
+    <p style="font-size:13px;color:#555;">Describe the person's needs, routines, and communication style. On-device AI will suggest a starter set of words.</p>
+    <textarea id="caregiver-input" rows="5" placeholder="e.g. My father had a stroke and has trouble speaking. He mostly needs to ask for the bathroom, water, pain relief, and to call family."></textarea>
+    <div class="modal-actions">
+      ${SpeechRecog ? '<button id="mic-btn" class="modal-btn">🎤 Dictate</button>' : ''}
+      <button id="build-board-btn" class="modal-btn primary">✨ Build board</button>
+      <button id="cancel-caregiver-btn" class="modal-btn">Cancel</button>
+    </div>
+    <div id="caregiver-status"></div>
+  `);
+  document.getElementById("cancel-caregiver-btn").onclick = closeModal;
+  if (SpeechRecog) {
+    document.getElementById("mic-btn").onclick = ()=> startDictation("caregiver-input");
+  }
+  document.getElementById("build-board-btn").onclick = async ()=>{
+    const desc = document.getElementById("caregiver-input").value.trim();
+    if (!desc) return;
+    if (modelState !== "ready") {
+      document.getElementById("caregiver-status").textContent = "AI model still loading — please wait a moment and try again.";
+      return;
+    }
+    document.getElementById("caregiver-status").textContent = "Thinking…";
+
+    const listPrompt = `A caregiver describes someone's communication needs: "${desc}". List 14 short words or phrases this person would most need on a communication board, separated by commas.`;
+    const listText = await askAI(listPrompt, 120);
+    const words = parseWordList(listText, 16);
+
+    if (words.length < 4) {
+      document.getElementById("caregiver-status").textContent = "Could not build a board from that description — try adding more detail.";
+      return;
+    }
+
+    const namePrompt = `Give a short 2-3 word title for a communication board for: "${desc}".`;
+    const nameText = await askAI(namePrompt, 10);
+    const boardName = ((nameText || "My Board").split(/[\n,]/)[0] || "My Board").replace(/["'.]/g, "").trim().slice(0, 30) || "My Board";
+
+    const symbols = await Promise.all(words.map(w => generateSymbolFor(w)));
+
+    const obj = { boardName, words: symbols };
+    upsertPersonalizedTab(obj);
+    localStorage.setItem("aac_personalized", JSON.stringify(obj));
+    currentCat = "personalized";
+    buildTabs();
+    renderGrid();
+    closeModal();
+  };
+};
+
+// ---------- Generic modal helper ----------
+function openModal(innerHtml){
+  document.getElementById("modal-box").innerHTML = innerHtml;
+  document.getElementById("modal-overlay").style.display = "flex";
+}
+function closeModal(){
+  document.getElementById("modal-overlay").style.display = "none";
+}
+document.getElementById("modal-overlay").onclick = (e)=>{
+  if (e.target.id === "modal-overlay") closeModal();
+};
+
+// =========================================================
+// Wearable preview toggle (concept — same app, watch-sized frame)
+// =========================================================
+document.getElementById("watch-toggle-btn").onclick = ()=>{
+  const shell = document.getElementById("app-shell");
+  const isWatch = shell.classList.toggle("watch-mode");
+  document.getElementById("watch-toggle-btn").textContent = isWatch ? "🖥 Full View" : "⌚ Preview as Wearable";
+};
+
+function updateClock(){
+  const el = document.getElementById("watch-clock");
+  if (!el) return;
+  el.textContent = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
+setInterval(updateClock, 30000);
+
+// =========================================================
+// Init
+// =========================================================
+buildTabs();
+renderGrid();
+renderStrip();
+updateClock();
+</script>
+</body>
+</html>
